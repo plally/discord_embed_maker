@@ -2,15 +2,41 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"html/template"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 )
 
 var embedPageTemplate *template.Template
+
+func main() {
+	addr := flag.String("addr", ":4043", "")
+	fileDirectory := flag.String("dir", "./embeds", "")
+	secretFile := flag.String("secret", ".secret", "")
+
+	secret, _ := ioutil.ReadFile(*secretFile)
+
+	tmpl, err := template.ParseFiles("embed_page.html")
+	if err != nil {
+		panic(err)
+	}
+	embedPageTemplate = tmpl
+
+	http.Handle("/newpage",
+		requireAuth(string(secret), http.HandlerFunc(createEmbedPage)),
+	)
+
+	fs := http.FileServer(fileSystem{http.Dir(*fileDirectory)})
+	fs = http.StripPrefix("/embeds/", fs)
+
+	http.Handle("/embeds/", fs)
+	log.Fatal(http.ListenAndServe(*addr, nil))
+}
 
 type fileSystem struct {
 	dir http.Dir
@@ -32,29 +58,12 @@ func (f fileSystem) Open(name string) (http.File, error) {
 	return file, err
 }
 
-func main() {
-	tmpl, err := template.ParseFiles("embed_page.html")
-	if err != nil {
-		panic(err)
-	}
-	embedPageTemplate = tmpl
-
-	http.HandleFunc("/newpage", createEmbedPage)
-
-	fs := http.FileServer(fileSystem{http.Dir("./embeds")})
-	fs = http.StripPrefix("/embeds/", fs)
-
-	http.Handle("/embeds/", fs)
-
-	log.Fatal( http.ListenAndServe(":4043", nil) )
-}
-
 type newEmbedPage struct {
-	Meta map[string]string
-	Title string
-	Color string
+	Meta     map[string]string
+	Title    string
+	Color    string
 	Redirect string
-	Name string
+	Name     string
 }
 
 func requireAuth(token string, h http.Handler) http.Handler {
@@ -67,6 +76,7 @@ func requireAuth(token string, h http.Handler) http.Handler {
 		h.ServeHTTP(w, r)
 	})
 }
+
 func createEmbedPage(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		return
@@ -77,17 +87,21 @@ func createEmbedPage(w http.ResponseWriter, r *http.Request) {
 	json.Unmarshal(data, &embedPage)
 
 	embedPage.Name = "embeds/" + embedPage.Name
+	embedPage.Name = path.Clean(embedPage.Name)
 
 	dir := filepath.Dir(embedPage.Name)
-	os.MkdirAll(dir, 0755)
-	file, err := os.Create(embedPage.Name+".html")
+	err := os.MkdirAll(dir, 0755)
+	if err != nil {
+		panic(err)
+	}
+
+	file, err := os.Create(embedPage.Name)
 	defer file.Close()
 	if err != nil {
 		panic(err)
 	}
 
-
-
 	_ = embedPageTemplate.Execute(file, embedPage)
 	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(embedPage.Name))
 }

@@ -4,7 +4,6 @@
     {{ range $key, $value := .Meta }}
     <meta property="{{$key}}" content="{{$value}}"/>
     {{ end }}
-    <meta name="theme-color" content="{{.Color}}">
     <meta http-equiv="refresh" content = "1; url={{.Redirect}}" />
 </head>
 </html>
