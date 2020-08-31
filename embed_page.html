@@ -1,0 +1,9 @@
+<html lang="en">
+<head>
+    <title>{{.Title}}</title>
+    {{ range $key, $value := .Meta }}
+    <meta property="{{$key}}" content="{{$value}}"/>
+    {{ end }}
+    <meta http-equiv="refresh" content = "1; url={{.Redirect}}" />
+</head>
+</html>
